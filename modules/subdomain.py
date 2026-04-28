@@ -6,22 +6,22 @@ class SubdomainEnumerator:
 
     #load subdomain tu file 
     def load(self, filepath):
-        subdomain = set()
+        subdomains = set()
 
         try: 
             with open(filepath, "r") as f:
                 for line in f :
                     sub = line.strip()
                     if sub:
-                        subdomain.add(sub)
+                        subdomains.add(sub)
         except FileNotFoundError:
             print(f"[!] File not found: {filepath}")
 
-        return list(subdomain)
+        return list(subdomains)
     
     #lay them tu crt.sh (optional)
     async def fetch_crtsh(self, domain):
-        url = f"https://crt.sh/?q=25.{domain}&output=json"
+        url = f"https://crt.sh/?q=%25.{domain}&output=json"
         subdomains = set()
 
         try:
@@ -35,10 +35,10 @@ class SubdomainEnumerator:
 
                 for entry in data:
                     names = entry.get("name_value", "")
-                    for sub in names.split("/n"):
+                    for sub in names.split("\n"):
                         sub = sub.strip()
                         if domain in sub:
-                            domain.add(sub)
+                            subdomains.add(sub)
         except Exception:
             return []
         return list(subdomains)

@@ -7,6 +7,7 @@ from modules.subdomain import SubdomainEnumerator
 from modules.probe import prober
 from modules.crawler import Crawler
 from modules.analyzer import Analyzer
+from urllib.parse import urlparse as _parse
 
 async def run(domain=None, sub_file=None):
     print ("[+] Starting Recon Pipeline... \n")
@@ -38,8 +39,8 @@ async def run(domain=None, sub_file=None):
 
     #probe (alive check)
     print("[+] Probing targets...")
-    prober = prober(handler)
-    prober_results = await prober.run(urls)
+    pr0ber = prober(handler)
+    prober_results = await pr0ber.run(urls)
 
     alive_urls = [r["url"] for r in prober_results if r["status"] < 500]
 
@@ -51,14 +52,15 @@ async def run(domain=None, sub_file=None):
     
     #crawling
     print("[+] Crawling...")
-    crawler = Crawler(handler, max_dept=2)
+    crawler = Crawler(handler, max_depth=2)
     crawled_data = await crawler.run(alive_urls)
 
-    print(f"[+] Crawled endpoints: {len(crawler_data)} \n")
+    print(f"[+] Crawled endpoints: {len(crawled_data)} \n")
 
     #analyze
     print("[+] Analyzing attack surface...")
-    analyzer = Analyzer()
+    target_domain = _parse(alive_urls[0]).hostname
+    analyzer = Analyzer(target_domain=target_domain)
     findings = analyzer.analyze(crawled_data)
 
     print(f"[+] Findings: {len(findings)} \n")
@@ -76,13 +78,13 @@ async def run(domain=None, sub_file=None):
     print("[+] Report saved to result.json")
     await handler.close()
 
-    def main():
-        parser = argparse.ArgumentParser(description="Simple Recon Tool")
+def main():
+    parser = argparse.ArgumentParser(description="Simple Recon Tool")
 
-        parser.add_argument("-d", "--domain", help="Target domain (example.com)")
-        parser.add_argument("-f", "--file", help="Subdomain file input")
+    parser.add_argument("-d", "--domain", help="Target domain (example.com)")
+    parser.add_argument("-f", "--file", help="Subdomain file input")
 
-        args = parser.parse_args()
-        asyncio.run(run(domain=args.domain, sub_file=args.file))
-    if __name__ == "__main__":
-        main()
+    args = parser.parse_args()
+    asyncio.run(run(domain=args.domain, sub_file=args.file))
+if __name__ == "__main__":
+    main()

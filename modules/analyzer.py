@@ -1,7 +1,8 @@
 from urllib.parse import urlparse
 
 class Analyzer:
-    def __init__(self):
+    def __init__(self, target_domain=None):
+        self.target_domain = target_domain
         self.sensitive_paths = ["admin", "login", "dashboard", "config"]
         self.sqli_params = ["id", "user", "uid", "account"]
         self.redirect_params = ["redirect", "url", "next"]
@@ -9,35 +10,45 @@ class Analyzer:
 
     def analyze(self, crawled_data):
         findings = []
-        
+
         for item in crawled_data:
             url = item["url"]
-            params = item.get("param", [])
+            params = item.get("params", [])
 
             parsed = urlparse(url)
             path = parsed.path.lower()
 
+            # loc bo URL ngoai domain target
+            if self.target_domain and self.target_domain not in parsed.netloc:
+                continue
+
             result = {
                 "url": url,
-                "issues" : []
+                "issues": []
             }
 
-            #sensitive path detection
+            # sensitive path detection
             for keyword in self.sensitive_paths:
                 if keyword in path:
-                    result["issues"].append("sensitive_endponit")
-            
-            #sqli candidate 
+                    result["issues"].append("sensitive_endpoint")
+
+            # sqli candidate
             for p in params:
                 if p.lower() in self.sqli_params:
                     result["issues"].append(f"possible_sqli_param:{p}")
 
-            #open redirect candidate
+            # open redirect candidate
+            for p in params:
+                if p.lower() in self.redirect_params:
+                    result["issues"].append(f"possible_open_redirect:{p}")
+
+            # file inclusion candidate
             for p in params:
                 if p.lower() in self.file_params:
                     result["issues"].append(f"possible_file_inclusion:{p}")
 
-            #chi luu neu co issue
+            # chi luu neu co issue
             if result["issues"]:
                 findings.append(result)
+
         return findings

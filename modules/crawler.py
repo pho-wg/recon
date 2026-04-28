@@ -27,7 +27,7 @@ class Crawler:
         html = response.text
 
         #extract endpoints + params
-        endpoints = self.extract_links(url, html)
+        endpoints = self.extract_link(url, html)
 
         for endpoint, params in endpoints:
             self.results.append({
@@ -57,7 +57,7 @@ class Crawler:
             #remove pragment 
             clean_url = parsed._replace(fragment="").geturl()
 
-            links.add((clean_url, params))
+            links.add((clean_url, tuple(params)))
         return links
     async def run(self, start_urls):
         tasks = [self.crawl(url) for url in start_urls]
