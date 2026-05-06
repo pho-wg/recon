@@ -1,54 +1,91 @@
-from urllib.parse import urlparse
+import asyncio
+import argparse
+import json
 
-class Analyzer:
-    def __init__(self, target_domain=None):
-        self.target_domain = target_domain
-        self.sensitive_paths = ["admin", "login", "dashboard", "config"]
-        self.sqli_params = ["id", "user", "uid", "account"]
-        self.redirect_params = ["redirect", "url", "next"]
-        self.file_params = ["file", "path", "page"]
+from utils.request_handler import RequestHandler
+from modules.subdomain import SubdomainEnumerator
+from modules.probe import prober
+from modules.crawler import Crawler
+from modules.analyzer import Analyzer
+from urllib.parse import urlparse 
 
-    def analyze(self, crawled_data):
-        findings = []
+async def run(domain=None, sub_file=None):
+    print ("[+] Starting Recon Pipeline... \n")
 
-        for item in crawled_data:
-            url = item["url"]
-            params = item.get("params", [])
+    handler = RequestHandler()
+    
+    #subdomain enumeration
+    enum = SubdomainEnumerator()
+    subdomains = []
+    if sub_file:
+        print("[+] Loading subdomains from file...")
+        subdomains = enum.load(sub_file)
 
-            parsed = urlparse(url)
-            path = parsed.path.lower()
+    elif domain:
+        print("[+] Fetching subdomains from crt.sh...")
+        subs = await enum.fetch_crtsh(domain)
+        subdomains = subs
+    
+    else: 
+        print("[!] No input provided (domain or file).")
+        return
+    
+    if not subdomains:
+        print("[!] No subdomains found")
+        return
+    
+    urls = enum.to_urls(subdomains)
+    print(f"[+] Total targets: {len(urls)}\n")
 
-            # loc bo URL ngoai domain target
-            if self.target_domain and self.target_domain not in parsed.netloc:
-                continue
+    #probe (alive check)
+    print("[+] Probing targets...")
+    pr0ber = prober(handler)
+    prober_results = await pr0ber.run(urls)
 
-            result = {
-                "url": url,
-                "issues": []
-            }
+    alive_urls = [r["url"] for r in prober_results if r["status"] < 500]
 
-            # sensitive path detection
-            for keyword in self.sensitive_paths:
-                if keyword in path:
-                    result["issues"].append("sensitive_endpoint")
+    print(f"[+] Alive targets: {len(alive_urls)}\n")
+    if not alive_urls:
+        print("[!] No alive targets. Exiting.")
+        await handler.close()
+        return
+    
+    #crawling
+    print("[+] Crawling...")
+    target_domain = urlparse(alive_urls[0]).netloc
+    crawler = Crawler(handler, start_domain=target_domain, max_depth=2)
+    crawled_data = await crawler.run(alive_urls)
 
-            # sqli candidate
-            for p in params:
-                if p.lower() in self.sqli_params:
-                    result["issues"].append(f"possible_sqli_param:{p}")
+    print(f"[+] Crawled endpoints: {len(crawled_data)} \n")
 
-            # open redirect candidate
-            for p in params:
-                if p.lower() in self.redirect_params:
-                    result["issues"].append(f"possible_open_redirect:{p}")
+    #analyze
+    print("[+] Analyzing attack surface...")
+    target_domain = urlparse(alive_urls[0]).hostname
+    analyzer = Analyzer(target_domain=target_domain)
+    findings = analyzer.analyze(crawled_data)
 
-            # file inclusion candidate
-            for p in params:
-                if p.lower() in self.file_params:
-                    result["issues"].append(f"possible_file_inclusion:{p}")
+    print(f"[+] Findings: {len(findings)} \n")
 
-            # chi luu neu co issue
-            if result["issues"]:
-                findings.append(result)
+    #save report
+    output = {
+        "targets": alive_urls,
+        "endpoint": crawled_data,
+        "findings": findings
+    }
 
-        return findings
+    with open("result.json", "w") as f:
+        json.dump(output, f, indent=4)
+    
+    print("[+] Report saved to result.json")
+    await handler.close()
+
+def main():
+    parser = argparse.ArgumentParser(description="Simple Recon Tool")
+
+    parser.add_argument("-d", "--domain", help="Target domain (example.com)")
+    parser.add_argument("-f", "--file", help="Subdomain file input")
+
+    args = parser.parse_args()
+    asyncio.run(run(domain=args.domain, sub_file=args.file))
+if __name__ == "__main__":
+    main()

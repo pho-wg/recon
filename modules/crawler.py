@@ -3,8 +3,9 @@ from urllib.parse import urljoin, urlparse, parse_qs
 import asyncio 
 
 class Crawler:
-    def __init__(self, handler, max_depth=2, concurrency=20):
+    def __init__(self, handler, start_domain=None, max_depth=2, concurrency=20):
         self.handler = handler
+        self.start_domain = start_domain
         self.max_depth = max_depth
         self.semaphore = asyncio.Semaphore(concurrency)
         self.visited = set()
@@ -17,6 +18,9 @@ class Crawler:
         if url in self.visited:
             return
         
+        if self.start_domain:
+            if urlparse(url).netloc != self.start_domain:
+                return
         self.visited.add(url)
         async with self.semaphore:
             response = await self.handler.get(url)
@@ -60,6 +64,9 @@ class Crawler:
             links.add((clean_url, tuple(params)))
         return links
     async def run(self, start_urls):
+        if not self.start_domain and start_urls:
+            self.start_domain = urlparse(start_urls[0]).netloc
+            
         tasks = [self.crawl(url) for url in start_urls]
         await asyncio.gather(*tasks)
 

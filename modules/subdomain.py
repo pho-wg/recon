@@ -19,7 +19,7 @@ class SubdomainEnumerator:
 
         return list(subdomains)
     
-    #lay them tu crt.sh (optional)
+    #crt.sh (optional)
     async def fetch_crtsh(self, domain):
         url = f"https://crt.sh/?q=%25.{domain}&output=json"
         subdomains = set()
